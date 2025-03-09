@@ -72,10 +72,24 @@ This is a simple login system built with Flask and MySQL. It allows users to reg
 
 ## Running the Application
 
-1. **Start the Flask application:**
+### On Ubuntu:
+
+1. **Set environment variables and run the Flask application:**
 
     ```sh
-    python main.py
+    export FLASK_APP=main.py
+    export FLASK_DEBUG=1
+    flask run
+    ```
+
+### On Windows:
+
+1. **Set environment variables and run the Flask application:**
+
+    ```sh
+    set FLASK_APP=main.py
+    set FLASK_DEBUG=1
+    flask run
     ```
 
 2. **Open your web browser and navigate to:**
