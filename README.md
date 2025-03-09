@@ -61,14 +61,17 @@ This is a simple login system built with Flask and MySQL. It allows users to reg
 
 5. **Configure the database connection:**
 
-    - Open [main.py](http://_vscodecontentref_/0) and update the database connection details:
+    - Create a `config.py` file in the project directory with the following content:
 
         ```python
-        app.config['MYSQL_HOST'] = 'localhost'
-        app.config['MYSQL_USER'] = 'your_mysql_username'
-        app.config['MYSQL_PASSWORD'] = 'your_mysql_password'
-        app.config['MYSQL_DB'] = 'pythonlogin'
+        SECRET_KEY = 'your secret key'
+        MYSQL_HOST = 'localhost'
+        MYSQL_USER = 'your_mysql_username'
+        MYSQL_PASSWORD = 'your_mysql_password'
+        MYSQL_DB = 'pythonlogin'
         ```
+
+    - If `config.py` does not exist, the application will use default values specified in `main.py`.
 
 ## Running the Application
 
