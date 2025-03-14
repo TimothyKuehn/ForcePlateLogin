@@ -5,4 +5,82 @@
 {% block content %}
 <h2>Home Page</h2>
 <p>Welcome back, {{ username }}!</p>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<canvas id="forceChart" width="400" height="250"></canvas>
+
+<!-- Trigger Recording Button -->
+<button id="triggerButton">Trigger Recording</button>
+
+<script>
+  const ctx = document.getElementById('forceChart').getContext('2d');
+
+  // Parse the data passed from the backend
+  const timeData = JSON.parse('{{ time_data|tojson|safe }}');
+  const forceData = JSON.parse('{{ force_data|tojson|safe }}');
+
+  const forceChart = new Chart(ctx, {
+    type: 'line', // Line chart type
+    data: {
+      labels: timeData, // Time in seconds
+      datasets: [{
+        label: 'Force (N)', // Newtons
+        data: forceData, // Force values
+        borderWidth: 2,
+        borderColor: 'rgba(255, 76, 76, 1)',
+        backgroundColor: 'rgba(255, 76, 76, 0.2)',
+        fill: true,
+        tension: 0.3 // smooths the line
+      }]
+    },
+    options: {
+      responsive: true,
+      animation: false, 
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: 'Time (s)'
+          }
+        },
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Force (N)'
+          }
+        }
+      }
+    }
+  });
+
+  // Function to trigger recording
+  document.getElementById('triggerButton').addEventListener('click', function() {
+    fetch('/trigger', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer YOUR_API_TOKEN' 
+      },
+      body: JSON.stringify({
+        device_id: 'YOUR_DEVICE_ID',
+        command: 'start_recording',
+        user_id: '{{ session["id"] }}' 
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        alert('Error: ' + data.error);
+      } else {
+        alert('Success: ' + data.message);
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+    });
+  });
+</script>
 {% endblock %}
