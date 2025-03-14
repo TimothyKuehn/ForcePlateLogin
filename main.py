@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session
 from flask_mysqldb import MySQL
 import MySQLdb.cursors, re, hashlib
 import os
+import jsonify
 
 app = Flask(__name__)
 
@@ -18,8 +19,8 @@ else:
 # Intialize MySQL
 mysql = MySQL(app)
 
-# http://localhost:5000/pythonlogin/ - the following will be our login page, which will use both GET and POST requests
-@app.route('/pythonlogin/', methods=['GET', 'POST'])
+# http://localhost:5000/ - the following will be our login page, which will use both GET and POST requests
+@app.route('/', methods=['GET', 'POST'])
 def login():
     msg = ''
     # Check if "username" and "password" POST requests exist (user submitted form)
@@ -50,8 +51,8 @@ def login():
     return render_template('index.html', msg=msg)
 
 
-# http://localhost:5000/python/logout - this will be the logout page
-@app.route('/pythonlogin/logout')
+# http://localhost:5000/logout - this will be the logout page
+@app.route('/logout')
 def logout():
     # Remove session data, this will log the user out
    session.pop('loggedin', None)
@@ -60,8 +61,8 @@ def logout():
    # Redirect to login page
    return redirect(url_for('login'))
 
-# http://localhost:5000/pythinlogin/register - this will be the registration page, we need to use both GET and POST requests
-@app.route('/pythonlogin/register', methods=['GET', 'POST'])
+# http://localhost:5000/register - this will be the registration page, we need to use both GET and POST requests
+@app.route('/register', methods=['GET', 'POST'])
 def register():
     # Output message if something goes wrong...
     msg = ''
@@ -99,8 +100,8 @@ def register():
     # Show registration form with message (if any)
     return render_template('register.html', msg=msg)
 
-# http://localhost:5000/pythinlogin/profile - this will be the profile page, only accessible for logged in users
-@app.route('/pythonlogin/profile')
+# http://localhost:5000/profile - this will be the profile page, only accessible for logged in users
+@app.route('/profile')
 def profile():
     # Check if the user is logged in
     if 'loggedin' in session:
@@ -113,13 +114,57 @@ def profile():
     # User is not logged in redirect to login page
     return redirect(url_for('login'))
 
-# http://localhost:5000/pythinlogin/home - this will be the home page, only accessible for logged in users
-@app.route('/pythonlogin/home')
+# http://localhost:5000/home - this will be the home page, only accessible for logged in users
+@app.route('/home')
 def home():
     # Check if the user is logged in
     if 'loggedin' in session:
+        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+        cursor.execute('SELECT time, jump_force FROM data WHERE userID = %s', (session['id'],))
+        data = cursor.fetchall()
+        
+        # Extract time and jump_force into separate lists
+        time_data = [float(row['time']) for row in data]
+        force_data = [float(row['jump_force']) for row in data]
+        
         # User is loggedin show them the home page
-        return render_template('home.html', username=session['username'])
+        return render_template('home.html', username=session['username'], time_data=time_data, force_data=force_data)
     # User is not loggedin redirect to login page
     return redirect(url_for('login'))
 
+@app.route('/trigger', methods=['POST'])
+def trigger_recording():
+    msg = ''
+    # Get and verify token
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"error": "Missing Authorization"}), 401
+    
+    token = auth_header.split(" ")[1]
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute("SELECT * FROM clients WHERE api_token = %s", (token,))
+    client = cursor.fetchone()
+    
+    if not client:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    client_id = client['id']
+
+    # Get command payload
+    data = request.get_json()
+    device_id = data.get('device_id')
+    command = data.get('command')
+    user_id = data.get('user_id')
+
+    # Verify this client owns the ESP32
+    cursor.execute("SELECT * FROM devices WHERE device_id = %s AND client_id = %s", (device_id, client_id))
+    device = cursor.fetchone()
+
+    if not device:
+        return jsonify({"error": "Forbidden: You do not own this device"}), 403
+
+    # Insert command into commands table
+    cursor.execute("INSERT INTO commands (device_id, user_id, command) VALUES (%s, %s, %s)", (device_id, user_id, command))
+    mysql.connection.commit()
+
+    return jsonify({"message": "Command accepted"}), 200
