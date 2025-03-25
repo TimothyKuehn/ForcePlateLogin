@@ -1,8 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_mysqldb import MySQL
 import MySQLdb.cursors, re, hashlib
 import os
-import jsonify
 
 app = Flask(__name__)
 
