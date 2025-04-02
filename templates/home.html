@@ -14,19 +14,6 @@
 <!-- Trigger Recording Button -->
 <button id="triggerButton">Trigger Recording</button>
 
-<!-- Bluetooth Pairing Section -->
-<h3>Bluetooth Pairing</h3>
-<label for="ssid">SSID:</label>
-<input type="text" id="ssid" placeholder="Enter value for WiFi SSID">
-<br>
-<label for="password">Password:</label>
-<input type="text" id="password" placeholder="Enter value for WiFi password">
-<br>
-<label for="board_number">Board Number:</label>
-<input type="text" id="board_number" placeholder="Enter the board's number">
-<br>
-<button id="connectButton">Connect to ESP32</button>
-
 <script>
   const ctx = document.getElementById('forceChart').getContext('2d');
 
@@ -95,25 +82,5 @@
       console.error('Error:', error);
     });
   });
-
-  document.getElementById('connectButton').addEventListener('click', async function() {
-  const ssid = document.getElementById('ssid').value;
-  const password = document.getElementById('password').value;
-
-  try {
-    const response = await fetch('http://192.168.4.1/config', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ ssid, password })
-    });
-
-    const result = await response.json();
-    alert('ESP32 response: ' + result.message);
-  } catch (err) {
-    console.error(err);
-    alert('Failed to send Wi-Fi credentials. Make sure you are connected to ESP32\'s Wi-Fi.');
-  }
-});
-
 </script>
 {% endblock %}
