@@ -35,6 +35,9 @@ This is a simple login system built with Flask and MySQL. It allows users to reg
 3. **Install the required packages:**
 
     ```sh
+    sudo apt update
+    sudo apt install python3-dev default-libmysqlclient-dev build-essential
+
     pip install Flask Flask-MySQLdb
     ```
 
