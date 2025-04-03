@@ -167,3 +167,6 @@ def trigger_recording():
     mysql.connection.commit()
 
     return jsonify({"message": "Command accepted"}), 200
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
