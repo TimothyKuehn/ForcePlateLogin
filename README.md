@@ -21,7 +21,7 @@ This is a simple login system built with Flask and MySQL. It allows users to reg
 1. **Clone the repository:**
 
     ```sh
-    git clone https://github.com/yourusername/python_login.git
+    git clone https://github.com/TimothyKuehn/python_login.git
     cd python_login
     ```
 
