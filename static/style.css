@@ -15,7 +15,7 @@
 }
 
 body {
-    background-color: #435165;
+    background-color: #f3f4f7;
     margin: 0;
 }
 .login, .register {
@@ -79,7 +79,7 @@ body {
     border: 0;
     cursor: pointer;
     font-weight: bold;
-    color: #ffffff;
+    color: #f3f4f7;
     transition: background-color 0.2s;
 }
 .login form input[type="submit"]:hover, .register form input[type="submit"]:hover {

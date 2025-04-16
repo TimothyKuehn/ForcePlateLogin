@@ -65,7 +65,7 @@
         'Authorization': 'Bearer YOUR_API_TOKEN' 
       },
       body: JSON.stringify({
-        device_id: 'YOUR_DEVICE_ID',
+        hash: 'YOUR_DEVICE_MAC_ADDRESS', // MAC address
         command: 'start_recording',
         user_id: '{{ session["id"] }}' 
       })

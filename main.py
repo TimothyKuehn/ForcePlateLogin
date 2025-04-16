@@ -1,9 +1,21 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, request, jsonify, session
 from flask_mysqldb import MySQL
 import MySQLdb.cursors, re, hashlib
 import os
+from flask_cors import CORS  # Import CORS
+from datetime import timedelta  # Import timedelta for session expiration
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+import ssl
 
 app = Flask(__name__)
+
+CORS(app, supports_credentials=True)
+
+# Update session cookie configurations
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Use 'Lax' for better compatibility
+app.config['SESSION_COOKIE_SECURE'] = True    # Set to False for local development (no HTTPS)
+app.config['SESSION_COOKIE_DOMAIN'] = None     # Use None for localhost
+app.config['SESSION_COOKIE_HTTPONLY'] = True   # Ensure cookies are HTTP-only
 
 # Load configuration from config.py if it exists, otherwise use default values
 if os.path.exists('config.py'):
@@ -15,158 +27,167 @@ else:
     app.config['MYSQL_PASSWORD'] = 'root'
     app.config['MYSQL_DB'] = 'pythonlogin'
 
+# Set session lifetime
+app.permanent_session_lifetime = timedelta(days=7)  # Session lasts for 7 days
+
 # Intialize MySQL
 mysql = MySQL(app)
 
-# http://localhost:5000/ - the following will be our login page, which will use both GET and POST requests
-@app.route('/', methods=['GET', 'POST'])
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# User class for Flask-Login
+class User(UserMixin):
+    def __init__(self, id, username):
+        self.id = id
+        self.username = username
+
+# User loader for Flask-Login
+@login_manager.user_loader
+def load_user(user_id):
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute('SELECT * FROM accounts WHERE id = %s', (user_id,))
+    account = cursor.fetchone()
+    if account:
+        return User(id=account['id'], username=account['username'])
+    return None
+
+@app.route('/login', methods=['POST'])
 def login():
-    msg = ''
-    # Check if "username" and "password" POST requests exist (user submitted form)
-    if request.method == 'POST' and 'username' in request.form and 'password' in request.form:
-        # Create variables for easy access
-        username = request.form['username']
-        password = request.form['password']
-        
-        # Hash the entered password in the same way as you did when registering
+    if request.method == 'POST' and 'username' in request.json and 'password' in request.json:
+        username = request.json['username']
+        password = request.json['password']
+
+        # Hash the entered password
         hash = password + app.secret_key
         hash = hashlib.sha1(hash.encode())
         hashed_password = hash.hexdigest()
 
-        # Check if account exists using MySQL
+        # Check if account exists
         cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
         cursor.execute('SELECT * FROM accounts WHERE username = %s AND password = %s', (username, hashed_password,))
         account = cursor.fetchone()
-
-        # If account exists, log the user in
         if account:
-            session['loggedin'] = True
-            session['id'] = account['id']
-            session['username'] = account['username']
-            return redirect(url_for('home'))
+            user = User(id=account['id'], username=account['username'])
+            login_user(user)
+            return jsonify({"message": "Login successful", "user_id": account['id'], "username": account['username']}), 200
         else:
-            msg = 'Incorrect username/password!'
-    
-    return render_template('index.html', msg=msg)
+            return jsonify({"error": "Incorrect username/password"}), 401
+    return jsonify({"error": "Invalid request"}), 400
 
-
-# http://localhost:5000/logout - this will be the logout page
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])
 def logout():
-    # Remove session data, this will log the user out
-   session.pop('loggedin', None)
-   session.pop('id', None)
-   session.pop('username', None)
-   # Redirect to login page
-   return redirect(url_for('login'))
+    logout_user()  # Logs out the user using Flask-Login
 
-# http://localhost:5000/register - this will be the registration page, we need to use both GET and POST requests
-@app.route('/register', methods=['GET', 'POST'])
+    # Clear the session cookies
+    session.clear()
+
+    response = jsonify({"message": "Logged out successfully"})
+    response.set_cookie('session', '', expires=0)  # Delete the session cookie
+    return response, 200
+
+@app.route('/register', methods=['POST'])
 def register():
-    # Output message if something goes wrong...
-    msg = ''
-    # Check if "username", "password" and "email" POST requests exist (user submitted form)
-    if request.method == 'POST' and 'username' in request.form and 'password' in request.form and 'email' in request.form:
-        # Create variables for easy access
-        username = request.form['username']
-        password = request.form['password']
-        email = request.form['email']
-        # Check if account exists using MySQL
+    # Check if "username", "password" and "email" POST requests exist
+    if request.method == 'POST' and 'username' in request.json and 'password' in request.json and 'email' in request.json:
+        username = request.json['username']
+        password = request.json['password']
+        email = request.json['email']
+
         cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
         cursor.execute('SELECT * FROM accounts WHERE username = %s', (username,))
         account = cursor.fetchone()
-        # If account exists show error and validation checks
+
         if account:
-            msg = 'Account already exists!'
+            return jsonify({"error": "Account already exists"}), 409
         elif not re.match(r'[^@]+@[^@]+\.[^@]+', email):
-            msg = 'Invalid email address!'
+            return jsonify({"error": "Invalid email address"}), 400
         elif not re.match(r'[A-Za-z0-9]+', username):
-            msg = 'Username must contain only characters and numbers!'
+            return jsonify({"error": "Username must contain only characters and numbers"}), 400
         elif not username or not password or not email:
-            msg = 'Please fill out the form!'
+            return jsonify({"error": "Please fill out the form"}), 400
         else:
             # Hash the password
             hash = password + app.secret_key
             hash = hashlib.sha1(hash.encode())
             password = hash.hexdigest()
-            # Account doesn't exist, and the form data is valid, so insert the new account into the accounts table
+
+            # Insert the new account
             cursor.execute('INSERT INTO accounts VALUES (NULL, %s, %s, %s)', (username, password, email,))
             mysql.connection.commit()
-            msg = 'You have successfully registered!'
-    elif request.method == 'POST':
-        # Form is empty... (no POST data)
-        msg = 'Please fill out the form!'
-    # Show registration form with message (if any)
-    return render_template('register.html', msg=msg)
+            return jsonify({"message": "Registration successful"}), 201
+    return jsonify({"error": "Invalid request"}), 400
 
-# http://localhost:5000/profile - this will be the profile page, only accessible for logged in users
-@app.route('/profile')
+@app.route('/profile', methods=['GET'])
+@login_required
 def profile():
-    # Check if the user is logged in
-    if 'loggedin' in session:
-        # We need all the account info for the user so we can display it on the profile page
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-        cursor.execute('SELECT * FROM accounts WHERE id = %s', (session['id'],))
-        account = cursor.fetchone()
-        # Show the profile page with account info
-        return render_template('profile.html', account=account)
-    # User is not logged in redirect to login page
-    return redirect(url_for('login'))
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute('SELECT * FROM accounts WHERE id = %s', (current_user.id,))
+    account = cursor.fetchone()
+    return jsonify({"account": account}), 200
 
-# http://localhost:5000/home - this will be the home page, only accessible for logged in users
-@app.route('/home')
+@app.route('/home', methods=['GET'])
+@login_required
 def home():
-    # Check if the user is logged in
-    if 'loggedin' in session:
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-        cursor.execute('SELECT time, jump_force FROM data WHERE userID = %s', (session['id'],))
-        data = cursor.fetchall()
-        
-        # Extract time and jump_force into separate lists
-        time_data = [float(row['time']) for row in data]
-        force_data = [float(row['jump_force']) for row in data]
-        
-        # User is loggedin show them the home page
-        return render_template('home.html', username=session['username'], time_data=time_data, force_data=force_data)
-    # User is not loggedin redirect to login page
-    return redirect(url_for('login'))
+    session_id = current_user.id
+
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute('SELECT time, jump_force FROM data WHERE userID = %s', (session_id,))
+    data = cursor.fetchall()
+
+    return jsonify({"data": data}), 200
 
 @app.route('/trigger', methods=['POST'])
+@login_required
 def trigger_recording():
-    msg = ''
-    # Get and verify token
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({"error": "Missing Authorization"}), 401
-    
-    token = auth_header.split(" ")[1]
-    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-    cursor.execute("SELECT * FROM clients WHERE api_token = %s", (token,))
-    client = cursor.fetchone()
-    
-    if not client:
-        return jsonify({"error": "Unauthorized"}), 401
-    
-    client_id = client['id']
+    requester_id = current_user.id
 
     # Get command payload
     data = request.get_json()
-    device_id = data.get('device_id')
+    authentication_token = data.get('authentication_token')
     command = data.get('command')
     user_id = data.get('user_id')
+    device_id = data.get('device_id')
 
-    # Verify this client owns the ESP32
-    cursor.execute("SELECT * FROM devices WHERE device_id = %s AND client_id = %s", (device_id, client_id))
-    device = cursor.fetchone()
+    # Verify this client owns the ESP32 using the MAC address
 
-    if not device:
-        return jsonify({"error": "Forbidden: You do not own this device"}), 403
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
 
     # Insert command into commands table
-    cursor.execute("INSERT INTO commands (device_id, user_id, command) VALUES (%s, %s, %s)", (device_id, user_id, command))
+    cursor.execute("INSERT INTO commands (device_id, user_id, command, authentication_token) VALUES (%s, %s, %s, %s)", (device_id, user_id, command, authentication_token))
     mysql.connection.commit()
 
     return jsonify({"message": "Command accepted"}), 200
 
+@app.route('/debug-session', methods=['GET'])
+def debug_session():
+    print("Debugging session state:")
+    print(f"loggedin: {session.get('loggedin')}")
+    print(f"id: {session.get('id')}")
+    print(f"username: {session.get('username')}")
+    return jsonify({
+        "loggedin": session.get('loggedin'),
+        "id": session.get('id'),
+        "username": session.get('username')
+    }), 200
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    cert_file = 'cert.pem'
+    key_file = 'key.pem'
+
+    if os.path.exists(cert_file) and os.path.exists(key_file):
+        try:
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_context.load_cert_chain(cert_file, key_file)
+            print("SSL certificates loaded successfully.")
+            app.run(host='0.0.0.0', port=5000, ssl_context=(cert_file, key_file))
+        except Exception as e:
+            print(f"Error loading SSL certificates: {e}")
+            print("Falling back to HTTP...")
+            app.run(host='0.0.0.0', port=5000)
+    else:
+        print("SSL certificates not found. Please generate 'cert.pem' and 'key.pem' for HTTPS.")
+        print("Falling back to HTTP...")
+        app.run(host='0.0.0.0', port=5000)
