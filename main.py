@@ -150,16 +150,29 @@ def trigger_recording():
     command = data.get('command')
     user_id = data.get('user_id')
     device_id = data.get('device_id')
+    recording_name = data.get('recording_name')
 
-    # Verify this client owns the ESP32 using the MAC address
+    # Check for empty fields
+    if not authentication_token or not command or not user_id or not device_id:
+        return jsonify({"error": "All fields are required."}), 400
 
+    # Handle recording_name logic
     cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    if not recording_name:
+        recording_name = "recording"
+
+    # Check if the recording_name already exists and increment if necessary
+    cursor.execute("SELECT COUNT(*) AS count FROM recordings WHERE name LIKE %s", (recording_name + '%',))
+    result = cursor.fetchone()
+    if result['count'] > 0:
+        recording_name = f"{recording_name}-{result['count']}"
 
     # Insert command into commands table
-    cursor.execute("INSERT INTO commands (device_id, user_id, command, authentication_token) VALUES (%s, %s, %s, %s)", (device_id, user_id, command, authentication_token))
+    cursor.execute("INSERT INTO commands (device_id, user_id, command, authentication_token, recording_name) VALUES (%s, %s, %s, %s, %s)",
+                   (device_id, user_id, command, authentication_token, recording_name))
     mysql.connection.commit()
 
-    return jsonify({"message": "Command accepted"}), 200
+    return jsonify({"message": "Command accepted", "recording_name": recording_name}), 200
 
 @app.route('/debug-session', methods=['GET'])
 def debug_session():
