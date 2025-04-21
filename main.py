@@ -148,7 +148,7 @@ def trigger_recording():
     data = request.get_json()
     authentication_token = data.get('authentication_token')
     command = data.get('command')
-    user_id = data.get('user_id')
+    user_id = current_user.id
     device_id = data.get('device_id')
     recording_name = data.get('recording_name')
 
@@ -174,6 +174,53 @@ def trigger_recording():
 
     return jsonify({"message": "Command accepted", "recording_name": recording_name}), 200
 
+@app.route('/getstartcommands', methods=['GET'])
+def get_start_commands():
+    # Get the payload from the request
+    data = request.get_json()
+    device_id = data.get('device_id')
+
+    # Check for missing fields
+    if not device_id:
+        return jsonify({"error": "'device_id' required."}), 400
+
+    # Query the commands table for matching records
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute("SELECT * FROM commands WHERE device_id = %s AND command = %s", (device_id, "start_recording"))
+    commands = cursor.fetchall()
+
+    # Return the matching commands
+    if commands:
+        cursor.execute("DELETE FROM commands WHERE device_id = %s AND command = %s", (device_id, "start_recording"))
+        mysql.connection.commit()
+        return jsonify({"commands": commands}), 200
+    else:
+        return jsonify({"message": "No commands found for the given device_id"}), 404
+    
+@app.route('/getstopcommands', methods=['GET'])
+def get_stop_commands():
+    # Get the payload from the request
+    data = request.get_json()
+    device_id = data.get('device_id')
+
+    # Check for missing fields
+    if not device_id:
+        return jsonify({"error": "'device_id' required."}), 400
+
+    # Query the commands table for matching records
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute("SELECT * FROM commands WHERE device_id = %s AND command = %s", (device_id, "stop_recording"))
+    commands = cursor.fetchall()
+
+    # Return the matching commands
+    if commands:
+        cursor.execute("DELETE FROM commands WHERE device_id = %s AND command = %s", (device_id, "stop_recording"))
+        mysql.connection.commit()
+        return jsonify({"commands": commands}), 200
+    else:
+        return jsonify({"message": "No commands found for the given device_id"}), 404
+    
+'''
 @app.route('/debug-session', methods=['GET'])
 def debug_session():
     print("Debugging session state:")
@@ -185,7 +232,7 @@ def debug_session():
         "id": session.get('id'),
         "username": session.get('username')
     }), 200
-
+'''
 if __name__ == '__main__':
     cert_file = 'cert.pem'
     key_file = 'key.pem'
@@ -204,3 +251,4 @@ if __name__ == '__main__':
         print("SSL certificates not found. Please generate 'cert.pem' and 'key.pem' for HTTPS.")
         print("Falling back to HTTP...")
         app.run(host='0.0.0.0', port=5000)
+        
