@@ -244,6 +244,43 @@ def send_measurements():
 
     return jsonify({'status': 'Data stored successfully'}), 200
 
+@app.route('/listrecordings', methods=['GET'])
+@login_required
+def list_recordings():
+    user_id = current_user.id  # Get the logged-in user's ID
+
+    # Query the database for recordings belonging to the user
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute("SELECT id, name FROM recordings WHERE user_id = %s", (user_id,))
+    recordings = cursor.fetchall()
+
+    # Return the recordings as a JSON response
+    return jsonify(recordings), 200
+
+
+@app.route('/recordings', methods=['POST'])
+@login_required
+def get_recording_data():
+    data = request.get_json()
+    recording_id = data.get('id')
+
+    # Validate the input
+    if not recording_id:
+        return jsonify({'error': 'Recording ID is required'}), 400
+
+    user_id = current_user.id  # Get the logged-in user's ID
+
+    # Query the database for the recording details
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute("SELECT * FROM recordings WHERE id = %s AND user_id = %s", (recording_id, user_id))
+    recording = cursor.fetchone()
+
+    if not recording:
+        return jsonify({'error': 'Recording not found or access denied'}), 404
+
+    # Return the recording details as a JSON response
+    return jsonify(recording), 200
+
 '''
 @app.route('/debug-session', methods=['GET'])
 def debug_session():
