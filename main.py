@@ -202,6 +202,7 @@ def heartbeat():
         commands = cursor.fetchall()
 
         if commands:
+            print("Commands found:", commands)
             response_data['commands'].extend(commands)
             cursor.execute("DELETE FROM commands WHERE device_id = %s AND command = %s", (device_id, command_type))
             mysql.connection.commit()
@@ -217,6 +218,31 @@ def status(device_id):
         return jsonify({'device_id': device_id, 'connected': True})
     else:
         return jsonify({'device_id': device_id, 'connected': False})
+
+@app.route('/sendmeasurements', methods=['POST'])
+def send_measurements():
+    data = request.get_json()
+
+    # Extract required fields from the JSON payload
+    sensor_id = data.get('sensor_id')
+    weight_lbs = data.get('weight_lbs')
+    user_id = data.get('userID')
+    timestamp = data.get('timestamp')
+
+    # Validate the input data
+    if not sensor_id or not weight_lbs or not user_id or not timestamp:
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    # Log the received data (for debugging purposes)
+    print(f"Received data: sensor_id={sensor_id}, weight_lbs={weight_lbs}, user_id={user_id}, timestamp={timestamp}")
+
+    # Store the data in the database
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute("INSERT INTO data (jump_force, userID, time) VALUES (%s, %s, %s)",
+                   (weight_lbs, user_id, timestamp))
+    mysql.connection.commit()
+
+    return jsonify({'status': 'Data stored successfully'}), 200
 
 '''
 @app.route('/debug-session', methods=['GET'])
