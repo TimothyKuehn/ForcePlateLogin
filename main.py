@@ -6,6 +6,7 @@ from flask_cors import CORS  # Import CORS
 from datetime import timedelta  # Import timedelta for session expiration
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import ssl
+import time
 
 app = Flask(__name__)
 
@@ -173,53 +174,50 @@ def trigger_recording():
     mysql.connection.commit()
 
     return jsonify({"message": "Command accepted", "recording_name": recording_name}), 200
+    
+# Store the last ping time for each ESP32
+last_seen = {}
 
-@app.route('/getstartcommands', methods=['GET'])
-def get_start_commands():
-    # Get the payload from the request
+# Time (in seconds) after which an ESP32 is considered disconnected
+TIMEOUT = 5
+
+@app.route('/heartbeat', methods=['POST'])
+def heartbeat():
     data = request.get_json()
     device_id = data.get('device_id')
-
-    # Check for missing fields
     if not device_id:
-        return jsonify({"error": "'device_id' required."}), 400
+        return jsonify({'error': 'Missing device_id'}), 400
 
-    # Query the commands table for matching records
+    # Update last seen time
+    last_seen[device_id] = time.time()
+
+    # Prepare database cursor
     cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-    cursor.execute("SELECT * FROM commands WHERE device_id = %s AND command = %s", (device_id, "start_recording"))
-    commands = cursor.fetchall()
 
-    # Return the matching commands
-    if commands:
-        cursor.execute("DELETE FROM commands WHERE device_id = %s AND command = %s", (device_id, "start_recording"))
-        mysql.connection.commit()
-        return jsonify({"commands": commands}), 200
+    # Collect start/stop commands
+    response_data = {'status': 'OK', 'commands': []}
+
+    for command_type in ['start_recording', 'stop_recording']:
+        cursor.execute("SELECT * FROM commands WHERE device_id = %s AND command = %s", (device_id, command_type))
+        commands = cursor.fetchall()
+
+        if commands:
+            response_data['commands'].extend(commands)
+            cursor.execute("DELETE FROM commands WHERE device_id = %s AND command = %s", (device_id, command_type))
+            mysql.connection.commit()
+
+    return jsonify(response_data), 200
+
+
+@app.route('/status/<device_id>', methods=['GET'])
+def status(device_id):
+    now = time.time()
+    last = last_seen.get(device_id)
+    if last and (now - last) < TIMEOUT:
+        return jsonify({'device_id': device_id, 'connected': True})
     else:
-        return jsonify({"message": "No commands found for the given device_id"}), 404
-    
-@app.route('/getstopcommands', methods=['GET'])
-def get_stop_commands():
-    # Get the payload from the request
-    data = request.get_json()
-    device_id = data.get('device_id')
+        return jsonify({'device_id': device_id, 'connected': False})
 
-    # Check for missing fields
-    if not device_id:
-        return jsonify({"error": "'device_id' required."}), 400
-
-    # Query the commands table for matching records
-    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-    cursor.execute("SELECT * FROM commands WHERE device_id = %s AND command = %s", (device_id, "stop_recording"))
-    commands = cursor.fetchall()
-
-    # Return the matching commands
-    if commands:
-        cursor.execute("DELETE FROM commands WHERE device_id = %s AND command = %s", (device_id, "stop_recording"))
-        mysql.connection.commit()
-        return jsonify({"commands": commands}), 200
-    else:
-        return jsonify({"message": "No commands found for the given device_id"}), 404
-    
 '''
 @app.route('/debug-session', methods=['GET'])
 def debug_session():
@@ -251,4 +249,3 @@ if __name__ == '__main__':
         print("SSL certificates not found. Please generate 'cert.pem' and 'key.pem' for HTTPS.")
         print("Falling back to HTTP...")
         app.run(host='0.0.0.0', port=5000)
-        
