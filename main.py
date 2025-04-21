@@ -147,14 +147,14 @@ def trigger_recording():
 
     # Get command payload
     data = request.get_json()
-    authentication_token = data.get('authentication_token')
+    authentication_key = data.get('authentication_key')
     command = data.get('command')
     user_id = current_user.id
     device_id = data.get('device_id')
     recording_name = data.get('recording_name')
 
     # Check for empty fields
-    if not authentication_token or not command or not user_id or not device_id:
+    if not authentication_key or not command or not user_id or not device_id:
         return jsonify({"error": "All fields are required."}), 400
 
     # Handle recording_name logic
@@ -169,8 +169,8 @@ def trigger_recording():
         recording_name = f"{recording_name}-{result['count']}"
 
     # Insert command into commands table
-    cursor.execute("INSERT INTO commands (device_id, user_id, command, authentication_token, recording_name) VALUES (%s, %s, %s, %s, %s)",
-                   (device_id, user_id, command, authentication_token, recording_name))
+    cursor.execute("INSERT INTO commands (device_id, user_id, command, authentication_key, recording_name) VALUES (%s, %s, %s, %s, %s)",
+                   (device_id, user_id, command, authentication_key, recording_name))
     mysql.connection.commit()
 
     return jsonify({"message": "Command accepted", "recording_name": recording_name}), 200
