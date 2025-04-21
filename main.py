@@ -143,13 +143,13 @@ def home():
 @app.route('/trigger', methods=['POST'])
 @login_required
 def trigger_recording():
-    requester_id = current_user.id
 
+    user_id = current_user.id
+    print(f"Current user ID: {current_user.id}")
     # Get command payload
     data = request.get_json()
     authentication_key = data.get('authentication_key')
     command = data.get('command')
-    user_id = current_user.id
     device_id = data.get('device_id')
     recording_name = data.get('recording_name')
 
@@ -168,6 +168,7 @@ def trigger_recording():
     if result['count'] > 0:
         recording_name = f"{recording_name}-{result['count']}"
 
+    print(f"Inserting command: device_id={device_id}, user_id={user_id}, command={command}, authentication_key={authentication_key}, recording_name={recording_name}")
     # Insert command into commands table
     cursor.execute("INSERT INTO commands (device_id, user_id, command, authentication_key, recording_name) VALUES (%s, %s, %s, %s, %s)",
                    (device_id, user_id, command, authentication_key, recording_name))
@@ -202,7 +203,8 @@ def heartbeat():
         commands = cursor.fetchall()
 
         if commands:
-            print("Commands found:", commands)
+            # Debug: Print the commands retrieved from the database
+            print("Commands found:", commands)  # Logs the full list of commands
             response_data['commands'].extend(commands)
             cursor.execute("DELETE FROM commands WHERE device_id = %s AND command = %s", (device_id, command_type))
             mysql.connection.commit()
@@ -226,7 +228,7 @@ def send_measurements():
     # Extract required fields from the JSON payload
     sensor_id = data.get('sensor_id')
     weight_lbs = data.get('weight_lbs')
-    user_id = data.get('userID')
+    user_id = data.get('user_id')
     timestamp = data.get('timestamp')
 
     # Validate the input data
