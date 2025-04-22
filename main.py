@@ -257,6 +257,7 @@ def list_recordings():
     cursor.execute("SELECT DISTINCT recording_name FROM data WHERE userID = %s", (user_id,))
     recordings = cursor.fetchall()
 
+    print(f"Recordings found for user {user_id}: {recordings}")  # Debugging output
     # Return the unique recording names as a JSON response
     return jsonify(recordings), 200
 
