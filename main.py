@@ -227,22 +227,35 @@ def send_measurements():
 
     # Extract required fields from the JSON payload
     sensor_id = data.get('sensor_id')
-    weight_lbs = data.get('weight_lbs')
     user_id = data.get('user_id')
-    timestamp = data.get('timestamp')
     recording_name = data.get('recording_name')
+    measurements = data.get('data')  # Expecting an array of {weight_lbs, timestamp}
 
     # Validate the input data
-    if not sensor_id or not weight_lbs or not user_id or not timestamp:
-        return jsonify({'error': 'Missing required fields'}), 400
+    if not sensor_id or not user_id or not measurements or not isinstance(measurements, list):
+        return jsonify({'error': 'Missing required fields or invalid data format'}), 400
 
     # Log the received data (for debugging purposes)
-    print(f"Received data: sensor_id={sensor_id}, weight_lbs={weight_lbs}, user_id={user_id}, timestamp={timestamp}")
+    print(f"Received data: sensor_id={sensor_id}, user_id={user_id}, recording_name={recording_name}, measurements={measurements}")
 
-    # Store the data in the database
+    # Prepare the database cursor
     cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-    cursor.execute("INSERT INTO data (jump_force, userID, time, recording_name) VALUES (%s, %s, %s, %s)",
-                   (weight_lbs, user_id, timestamp, recording_name))
+
+    # Insert each measurement into the database
+    for measurement in measurements:
+        weight_lbs = measurement.get('weight_lbs')
+        timestamp = measurement.get('timestamp')
+
+        # Validate individual measurement fields
+        if not weight_lbs or not timestamp:
+            return jsonify({'error': 'Each measurement must include weight_lbs and timestamp'}), 400
+
+        cursor.execute(
+            "INSERT INTO data (jump_force, userID, time, recording_name) VALUES (%s, %s, %s, %s)",
+            (weight_lbs, user_id, timestamp, recording_name)
+        )
+
+    # Commit the transaction
     mysql.connection.commit()
 
     return jsonify({'status': 'Data stored successfully'}), 200
