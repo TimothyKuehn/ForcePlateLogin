@@ -243,11 +243,15 @@ def send_measurements():
 
     # Insert each measurement into the database
     for measurement in measurements:
-        weight_lbs = measurement.get('weight_lbs')
-        timestamp = measurement.get('timestamp')
+        try:
+            # Convert fields to the appropriate types
+            weight_lbs = float(measurement.get('weight_lbs', 0))
+            timestamp = int(measurement.get('timestamp', 0))
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid data format for weight_lbs or timestamp'}), 400
 
         # Validate individual measurement fields
-        if not weight_lbs or not timestamp:
+        if weight_lbs is None or timestamp is None:
             return jsonify({'error': 'Each measurement must include weight_lbs and timestamp'}), 400
 
         cursor.execute(
