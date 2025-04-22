@@ -230,6 +230,7 @@ def send_measurements():
     weight_lbs = data.get('weight_lbs')
     user_id = data.get('user_id')
     timestamp = data.get('timestamp')
+    recording_name = data.get('recording_name')
 
     # Validate the input data
     if not sensor_id or not weight_lbs or not user_id or not timestamp:
@@ -238,25 +239,10 @@ def send_measurements():
     # Log the received data (for debugging purposes)
     print(f"Received data: sensor_id={sensor_id}, weight_lbs={weight_lbs}, user_id={user_id}, timestamp={timestamp}")
 
-    # Prepare database cursor
-    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-
-    # Check if this is the first datapoint for the given sensor_id
-    cursor.execute("SELECT id FROM recordings WHERE name = %s AND user_id = %s", (sensor_id, user_id))
-    recording = cursor.fetchone()
-
-    if not recording:
-        # Create a new recording if none exists for this sensor_id
-        cursor.execute(
-            "INSERT INTO recordings (name, user_id, created_at) VALUES (%s, %s, NOW())",
-            (sensor_id, user_id)
-        )
-        mysql.connection.commit()
-        print(f"New recording created for sensor_id={sensor_id}, user_id={user_id}")
-
     # Store the data in the database
-    cursor.execute("INSERT INTO data (jump_force, userID, time) VALUES (%s, %s, %s)",
-                   (weight_lbs, user_id, timestamp))
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute("INSERT INTO data (jump_force, userID, time, recording_name) VALUES (%s, %s, %s, %s)",
+                   (weight_lbs, user_id, timestamp, recording_name))
     mysql.connection.commit()
 
     return jsonify({'status': 'Data stored successfully'}), 200
@@ -266,12 +252,12 @@ def send_measurements():
 def list_recordings():
     user_id = current_user.id  # Get the logged-in user's ID
 
-    # Query the database for recordings belonging to the user
+    # Query the database for unique recording names in the "data" table for the user
     cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-    cursor.execute("SELECT id, name FROM recordings WHERE user_id = %s", (user_id,))
+    cursor.execute("SELECT DISTINCT recording_name FROM data WHERE userID = %s", (user_id,))
     recordings = cursor.fetchall()
 
-    # Return the recordings as a JSON response
+    # Return the unique recording names as a JSON response
     return jsonify(recordings), 200
 
 
@@ -279,24 +265,24 @@ def list_recordings():
 @login_required
 def get_recording_data():
     data = request.get_json()
-    recording_id = data.get('id')
+    recording_name = data.get('recording_name')
 
     # Validate the input
-    if not recording_id:
-        return jsonify({'error': 'Recording ID is required'}), 400
+    if not recording_name:
+        return jsonify({'error': 'Recording name is required'}), 400
 
     user_id = current_user.id  # Get the logged-in user's ID
 
-    # Query the database for the recording details
+    # Query the database for all data points with the matching recording name
     cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-    cursor.execute("SELECT * FROM recordings WHERE id = %s AND user_id = %s", (recording_id, user_id))
-    recording = cursor.fetchone()
+    cursor.execute("SELECT * FROM data WHERE recording_name = %s AND userID = %s", (recording_name, user_id))
+    data_points = cursor.fetchall()
 
-    if not recording:
-        return jsonify({'error': 'Recording not found or access denied'}), 404
+    if not data_points:
+        return jsonify({'error': 'No data points found for the given recording name or access denied'}), 404
 
-    # Return the recording details as a JSON response
-    return jsonify(recording), 200
+    # Return the data points as a JSON response
+    return jsonify(data_points), 200
 
 '''
 @app.route('/debug-session', methods=['GET'])
