@@ -238,8 +238,23 @@ def send_measurements():
     # Log the received data (for debugging purposes)
     print(f"Received data: sensor_id={sensor_id}, weight_lbs={weight_lbs}, user_id={user_id}, timestamp={timestamp}")
 
-    # Store the data in the database
+    # Prepare database cursor
     cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+
+    # Check if this is the first datapoint for the given sensor_id
+    cursor.execute("SELECT id FROM recordings WHERE name = %s AND user_id = %s", (sensor_id, user_id))
+    recording = cursor.fetchone()
+
+    if not recording:
+        # Create a new recording if none exists for this sensor_id
+        cursor.execute(
+            "INSERT INTO recordings (name, user_id, created_at) VALUES (%s, %s, NOW())",
+            (sensor_id, user_id)
+        )
+        mysql.connection.commit()
+        print(f"New recording created for sensor_id={sensor_id}, user_id={user_id}")
+
+    # Store the data in the database
     cursor.execute("INSERT INTO data (jump_force, userID, time) VALUES (%s, %s, %s)",
                    (weight_lbs, user_id, timestamp))
     mysql.connection.commit()
