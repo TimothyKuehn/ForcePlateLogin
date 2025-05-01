@@ -226,17 +226,23 @@ def send_measurements():
     data = request.get_json()
 
     # Extract required fields from the JSON payload
-    sensor_id = data.get('sensor_id')
+    device_id = data.get('device_id')
     user_id = data.get('user_id')
     recording_name = data.get('recording_name')
-    measurements = data.get('data')  # Expecting an array of {weight_lbs, timestamp}
+    measurements = data.get('data')  # Expecting an array of {weight_lbs, timestamp} 
 
+    print('Incoming data:', data)
+    print('device_id:', device_id)
+    print('user_id:', user_id)
+    print('recording_name:', recording_name)
+    print('measurements:', measurements)
+    print('isinstance(measurements, list):', isinstance(measurements, list))
     # Validate the input data
-    if not sensor_id or not user_id or not measurements or not isinstance(measurements, list):
+    if not device_id or not user_id or not measurements or not isinstance(measurements, list):
         return jsonify({'error': 'Missing required fields or invalid data format'}), 400
 
     # Log the received data (for debugging purposes)
-    print(f"Received data: sensor_id={sensor_id}, user_id={user_id}, recording_name={recording_name}, measurements={measurements}")
+    print(f"Received data: device_id={device_id}, user_id={user_id}, recording_name={recording_name}, measurements={measurements}")
 
     # Prepare the database cursor
     cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
