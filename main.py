@@ -240,10 +240,7 @@ def send_measurements():
     # Validate the input data
     if not device_id or not user_id or not measurements or not isinstance(measurements, list):
         return jsonify({'error': 'Missing required fields or invalid data format'}), 400
-
-    # Log the received data (for debugging purposes)
-    print(f"Received data: device_id={device_id}, user_id={user_id}, recording_name={recording_name}, measurements={measurements}")
-
+    
     # Prepare the database cursor
     cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
 
