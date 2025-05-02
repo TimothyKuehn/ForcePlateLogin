@@ -201,7 +201,7 @@ def heartbeat():
     for command_type in ['start_recording', 'stop_recording']:
         cursor.execute("SELECT * FROM commands WHERE device_id = %s AND command = %s", (device_id, command_type))
         commands = cursor.fetchall()
-
+        print(f"Commands for {command_type}: {commands}") 
         if commands:
             # Debug: Print the commands retrieved from the database
             print("Commands found:", commands)  # Logs the full list of commands
