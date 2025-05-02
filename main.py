@@ -231,12 +231,6 @@ def send_measurements():
     recording_name = data.get('recording_name')
     measurements = data.get('data')  # Expecting an array of {weight_lbs, timestamp} 
 
-    print('Incoming data:', data)
-    print('device_id:', device_id)
-    print('user_id:', user_id)
-    print('recording_name:', recording_name)
-    print('measurements:', measurements)
-    print('isinstance(measurements, list):', isinstance(measurements, list))
     # Validate the input data
     if not device_id or not user_id or not measurements or not isinstance(measurements, list):
         return jsonify({'error': 'Missing required fields or invalid data format'}), 400

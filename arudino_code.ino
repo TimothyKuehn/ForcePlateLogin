@@ -18,6 +18,9 @@
 #define AP_SSID "ESP32_Config"
 #define AP_PASSWORD "password"
 
+volatile bool transmissionJustStopped = false;
+volatile bool clearBufferNow = false;
+
 const int LOADCELL_DOUT_PIN = D4;
 const int LOADCELL_SCK_PIN = D5;
 const float calibration_factor = -9950;
@@ -57,6 +60,8 @@ struct WeightSample {
 const int BATCH_SIZE = 20;
 QueueHandle_t sendQueue;
 TaskHandle_t sendTaskHandle = NULL;
+TaskHandle_t heartbeatTaskHandle = NULL;
+
 
 // ---------------- Function Declarations ----------------
 
@@ -93,6 +98,7 @@ void setup() {
 
   sendQueue = xQueueCreate(100, sizeof(WeightSample));
   xTaskCreatePinnedToCore(sendTask, "SendTask", 8192, NULL, 1, &sendTaskHandle, 0);
+  xTaskCreate(heartbeatTask, "HeartbeatTask", 8192, NULL, 1, &heartbeatTaskHandle);
 
   Serial.println("Setup complete!");
 }
@@ -115,21 +121,18 @@ void loop() {
 
   unsigned long now = millis();
 
-  if (isTransmitting && now - recordingStartTime >= 15000) {
-    isTransmitting = false;
-    user_id = "";
-    recording_name = "";
-    Serial.println("Transmission automatically stopped after 15 seconds.");
-  }
+  if (isTransmitting && now - recordingStartTime >= 30000) {
+  isTransmitting = false;
+  transmissionJustStopped = true;
+  user_id = "";
+  recording_name = "";
+  Serial.println("Transmission automatically stopped after 30 seconds.");
+}
 
-  if (isTransmitting == false && WiFi.status() == WL_CONNECTED && now - lastHeartbeat >= HEARTBEAT_INTERVAL) {
-    lastHeartbeat = now;
-    sendHeartbeat();
-  }
 
   if (isTransmitting && WiFi.status() == WL_CONNECTED && now - lastDataSend >= DATA_INTERVAL) {
     lastDataSend = now;
-    float weight = scale.get_units(5);
+    float weight = scale.get_units(1);
     unsigned long elapsed = now - recordingStartTime;
     WeightSample sample = {weight, elapsed};
     xQueueSend(sendQueue, &sample, 0);
@@ -143,13 +146,28 @@ void sendTask(void* parameter) {
 
   while (true) {
     WeightSample sample;
-    if (xQueueReceive(sendQueue, &sample, portMAX_DELAY) == pdPASS) {
+    if (xQueueReceive(sendQueue, &sample, pdMS_TO_TICKS(100)) == pdPASS) {
       batch.push_back(sample);
+    }
+
+    // Clear batch if needed
+    if (clearBufferNow) {
+      clearBufferNow = false;
+      batch.clear();  // <--- THIS is what was missing
+      Serial.println("Send buffer cleared.");
     }
 
     if (batch.size() >= BATCH_SIZE) {
       sendDataBatch(batch);
       batch.clear();
+    }
+
+    if (transmissionJustStopped) {
+      transmissionJustStopped = false;
+      if (!batch.empty()) {
+        sendDataBatch(batch);
+        batch.clear();
+      }
     }
 
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -205,7 +223,7 @@ void sendDataBatch(const std::vector<WeightSample>& batch) {
 
   http.begin(client, SERVER_URL + "/sendmeasurements");
   http.addHeader("Content-Type", "application/json");
-
+  Serial.println("Data:" + jsonString);
   int httpCode = http.POST(jsonString);
 
   if (httpCode > 0) {
@@ -219,6 +237,15 @@ void sendDataBatch(const std::vector<WeightSample>& batch) {
 }
 
 // ---------------- Send Heartbeat ----------------
+void heartbeatTask(void* parameter) {
+  while (true) {
+    if (WiFi.status() == WL_CONNECTED) {
+      lastHeartbeat = millis();
+      sendHeartbeat();
+    }
+    vTaskDelay(pdMS_TO_TICKS(1000)); // wait 1s between heartbeats
+  }
+}
 
 void sendHeartbeat() {
   if (WiFi.status() != WL_CONNECTED) return;
@@ -269,11 +296,17 @@ void sendHeartbeat() {
 
         if (cmd_device_id.equals(DEVICE_ID) && cmd_token.equals(stored_authentication_key)) {
           if (cmd_type.equals("start_recording")) {
+            WeightSample dummy;
+            while (xQueueReceive(sendQueue, &dummy, 0) == pdTRUE) {
+              // Purged old data
+            }
+            clearBufferNow = true;
             isTransmitting = true;
             user_id = cmd_user_id;
             recordingStartTime = millis();
             Serial.println("Start command received. Transmission started.");
-          } else if (cmd_type.equals("stop_recording") && cmd_user_id.equals(user_id)) {
+          } 
+          else if (cmd_type.equals("stop_recording") && cmd_user_id.equals(user_id)) {
             isTransmitting = false;
             Serial.println("Stop command received. Transmission stopped.");
           }
